@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 // Load environment variables from .env file
 dotenv.config();
 
@@ -32,6 +32,7 @@ async function run() {
       const  usersCollection = db.collection("user");  
        const  blogsCollection = db.collection("blog");  
         const  catsCollection = db.collection("cats");
+        const catfoodsCollection=db.collection("catfood");
 
 // user ger for all 
 app.get("/user", async (req, res) => {
@@ -47,6 +48,7 @@ app.get('/user/:email',async(req,res)=>{
     const user = await usersCollection.findOne({ email: email });
     if (!user) return res.status(404).send("User not found");
     res.send(user);
+    console.log(user)
   } catch (error) {
     console.error("❌ Error in /user/:email:", error);
     res.status(500).send("Internal Server Error");
@@ -117,9 +119,43 @@ app.get('/blog',async(req,res)=>{
 });
 // get all cat 
 app.get('/cats',async(req,res)=>{
-  const result = await catsCollection.find().toArray()
+  const result = await catsCollection.find() .sort({ createdAt: -1 }).limit(8).toArray()
       res.send(result) 
 });
+app.get('/allcats', async (req, res) => {
+  const { search = '', sort = '', page = 1, limit = 8 } = req.query;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  const query = {
+    $or: [
+      { breed: { $regex: search, $options: 'i' } },
+      { color: { $regex: search, $options: 'i' } }
+    ]
+  };
+
+  const sortOption =
+    sort === 'asc' ? { price: 1 } : sort === 'desc' ? { price: -1 } : {};
+
+  const data = await catsCollection.find(query).sort(sortOption).skip(skip).limit(parseInt(limit)).toArray();
+  const total = await catsCollection.countDocuments(query);
+
+  res.send({ data, total });
+});
+
+
+// single cat get by id
+app.get('/cats/:id',async(req,res)=>{
+  const id = req.params.id;
+  if (!catsCollection) return res.status(503).send("Database not connected");
+  try {
+    const cat = await catsCollection.findOne({ _id: new ObjectId(id) });
+    if (!cat) return res.status(404).send("Cat not found");
+    res.send(cat);
+  } catch (error) {
+    console.error("❌ Error in /cats/:id:", error);
+    res.status(500).send("Internal Server Error");
+  }
+})
 // cats post 
 app.post('/cats',async(req,res)=>{
   const catData = req.body;
@@ -131,6 +167,57 @@ app.post('/cats',async(req,res)=>{
     res.send(result);
   } catch (error) {
     console.error("❌ Error in /cats:", error);
+    res.status(500).send("Internal Server Error");
+  }
+})
+// get 8 food for home page 
+app.get('/foods',async(req,res)=>{
+  const result = await catfoodsCollection.find() .sort({ createdAt: -1 }).limit(8).toArray()
+      res.send(result) 
+});
+
+// get all foodspagination
+app.get('/foods',async(req,res)=>{
+  const { search = '', sort = '', page = 1, limit = 8 } = req.query;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  const query = {
+    $or: [
+      { name: { $regex: search, $options: 'i' } },
+      { category: { $regex: search, $options: 'i' } }
+    ]
+  };
+
+  const sortOption =
+    sort === 'asc' ? { price: 1 } : sort === 'desc' ? { price: -1 } : {};
+
+  const data = await catfoodsCollection.find(query).sort(sortOption).skip(skip).limit(parseInt(limit)).toArray();
+  const total = await catfoodsCollection.countDocuments(query);
+
+  res.send({ data, total });
+})
+// catfoods post
+app.post('/catfoods',async(req,res)=>{
+  const data=req.body
+  try{
+     data.created_at = new Date().toISOString();
+  const result= await catfoodsCollection.insertOne(data);
+  res.send(result);
+  }catch (error) {
+    console.error("❌ Error in /cats:", error);
+    res.status(500).send("Internal Server Error");
+  }
+})
+// single food
+app.get('/foods/:id',async(req,res)=>{
+ const id = req.params.id;
+  if (!catfoodsCollection) return res.status(503).send("Database not connected");
+  try {
+    const cat = await catfoodsCollection.findOne({ _id: new ObjectId(id) });
+    if (!cat) return res.status(404).send("Cat not found");
+    res.send(cat);
+  } catch (error) {
+    console.error("❌ Error in /cats/:id:", error);
     res.status(500).send("Internal Server Error");
   }
 })

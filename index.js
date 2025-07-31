@@ -48,7 +48,6 @@ app.get('/user/:email',async(req,res)=>{
     const user = await usersCollection.findOne({ email: email });
     if (!user) return res.status(404).send("User not found");
     res.send(user);
-    console.log(user)
   } catch (error) {
     console.error("❌ Error in /user/:email:", error);
     res.status(500).send("Internal Server Error");
@@ -177,7 +176,7 @@ app.get('/foods',async(req,res)=>{
 });
 
 // get all foodspagination
-app.get('/foods',async(req,res)=>{
+app.get('/allfoods',async(req,res)=>{
   const { search = '', sort = '', page = 1, limit = 8 } = req.query;
   const skip = (parseInt(page) - 1) * parseInt(limit);
 

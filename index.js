@@ -224,41 +224,6 @@ app.get('/foods/:id',async(req,res)=>{
     res.status(500).send("Internal Server Error");
   }
 });
-// user get her all pending orders 
-// app.get('/order/:email', async (req, res) => {
-//   if (!ordersCollection)
-//     return res.status(503).send('Database not connected');
-
-//   const { email } = req.params;
-//   const { status } = req.query;
-//   const page = parseInt(req.query.page) || 1;
-//   const limit = parseInt(req.query.limit) || 10;
-//   const skip = (page - 1) * limit;
-
-//   try {
-//     const query = {
-//       buyer : email,
-//     };
-
-//     if (status) {
-//       // Capitalize status to match database value
-//       query.status = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
-//     }
-// const totalCount = await ordersCollection.countDocuments(query);
-
-//     const bookings = await ordersCollection
-//       .find(query)
-//       .sort({ created_at: -1 })
-//       .skip(skip)
-//       .limit(limit)
-//       .toArray();
-//     res.send({ totalCount, bookings });
-
-//   } catch (error) {
-//     console.error('❌ Error fetching orders:', error);
-//     res.status(500).send('Internal Server Error');
-//   }
-// });
 
 app.get('/order/:email', async (req, res) => {
   if (!ordersCollection)
@@ -315,7 +280,19 @@ app.post('/orders',async(req,res)=>{
   }
 })
 
-
+// delete paniding order by user 
+app.delete("/order/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const result = await ordersCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+    res.send(result);
+  } catch (error) {
+    console.error("❌ Error deleting booking:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
 
 
 
@@ -353,9 +330,11 @@ app.post('/payments',async(req,res)=>{
        const orderId =data.orderId; 
 
     if (orderId) {
-      await ordersCollection.updateOne(
+      await ordersCollection.updateMany(
         { _id: new ObjectId(orderId) },
-        { $set: { status: "confirmed" } }
+        { $set: { status: "confirmed",
+           confirmedcreated_at: new Date().toISOString()
+         } }
       );
     }
   const result= await paymentsCollection.insertOne(data);

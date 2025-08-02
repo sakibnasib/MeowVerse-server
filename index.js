@@ -4,7 +4,7 @@ const dotenv = require('dotenv');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 // Load environment variables from .env file
 dotenv.config();
-
+const stripe = require('stripe')(process.env.STRIPE_SK_KEY)
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -33,6 +33,9 @@ async function run() {
        const  blogsCollection = db.collection("blog");  
         const  catsCollection = db.collection("cats");
         const catfoodsCollection=db.collection("catfood");
+        const ordersCollection=db.collection("order");
+         const paymentsCollection=db.collection("payment");
+
 
 // user ger for all 
 app.get("/user", async (req, res) => {
@@ -59,6 +62,7 @@ app.patch('/user/applied/:email',async(req,res)=>{
   const email = req.params.email;
   const filter = { email: email };
   const data=req.body
+  data.status ='Pending'
   if (!usersCollection) return res.status(503).send("Database not connected");
   const updateDoc = {
     $set: {
@@ -219,7 +223,149 @@ app.get('/foods/:id',async(req,res)=>{
     console.error("❌ Error in /cats/:id:", error);
     res.status(500).send("Internal Server Error");
   }
+});
+// user get her all pending orders 
+// app.get('/order/:email', async (req, res) => {
+//   if (!ordersCollection)
+//     return res.status(503).send('Database not connected');
+
+//   const { email } = req.params;
+//   const { status } = req.query;
+//   const page = parseInt(req.query.page) || 1;
+//   const limit = parseInt(req.query.limit) || 10;
+//   const skip = (page - 1) * limit;
+
+//   try {
+//     const query = {
+//       buyer : email,
+//     };
+
+//     if (status) {
+//       // Capitalize status to match database value
+//       query.status = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+//     }
+// const totalCount = await ordersCollection.countDocuments(query);
+
+//     const bookings = await ordersCollection
+//       .find(query)
+//       .sort({ created_at: -1 })
+//       .skip(skip)
+//       .limit(limit)
+//       .toArray();
+//     res.send({ totalCount, bookings });
+
+//   } catch (error) {
+//     console.error('❌ Error fetching orders:', error);
+//     res.status(500).send('Internal Server Error');
+//   }
+// });
+
+app.get('/order/:email', async (req, res) => {
+  if (!ordersCollection)
+    return res.status(503).send('Database not connected');
+
+  const { email } = req.params;
+  const { status } = req.query;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  try {
+    const query = {
+      buyer: email,
+    };
+
+    if (status) {
+      // Use case-insensitive matching for status
+      query.status = new RegExp(`^${status}$`, 'i');
+    }
+
+    const totalCount = await ordersCollection.countDocuments(query);
+
+    const bookings = await ordersCollection
+      .find(query)
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    res.send({ totalCount, bookings });
+
+  } catch (error) {
+    console.error('❌ Error fetching orders:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+// get single for 
+
+
+
+// order post for user 
+app.post('/orders',async(req,res)=>{
+   const data=req.body  
+  try{
+     data.created_at =new Date().toISOString();
+ data.status ='Pending'
+  const result= await ordersCollection.insertOne(data);
+  res.send(result);
+  }catch (error) {
+    console.error("❌ Error in /orders:", error);
+    res.status(500).send("Internal Server Error");
+  }
 })
+
+
+
+
+
+
+
+
+// 
+// --- Route: Create Payment Intent ---
+app.post('/create-payment-intent', async (req, res) => {
+  const { orderId,  quantity,deliveryCharge } = req.body
+      const itams = await ordersCollection.findOne({
+        _id: new ObjectId(orderId),
+      })
+      const des=deliveryCharge * 100
+      if (!itams) return res.status(404).send({ message: 'Plant Not Found' })
+      const Price = quantity *itams?.singlepicePrice  * 100
+    const totalPrice=Price + des
+    console.log(itams?.singlepicePrice,quantity,deliveryCharge)
+    console.log(totalPrice)
+      // stripe...
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: totalPrice, // Convert to cents
+    currency: 'usd',
+    payment_method_types: ['card'],
+  });
+
+  res.send({ clientSecret: paymentIntent.client_secret });
+});
+
+// payments post to make payment data 
+app.post('/payments',async(req,res)=>{
+  const data=req.body
+   try{
+     data.created_at =new Date().toISOString();
+       const orderId =data.orderId; 
+
+    if (orderId) {
+      await ordersCollection.updateOne(
+        { _id: new ObjectId(orderId) },
+        { $set: { status: "confirmed" } }
+      );
+    }
+  const result= await paymentsCollection.insertOne(data);
+  res.send(result);
+  }catch (error) {
+    console.error("❌ Error in /orders:", error);
+    res.status(500).send("Internal Server Error");
+  }
+})
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");

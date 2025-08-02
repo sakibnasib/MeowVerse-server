@@ -190,15 +190,46 @@ app.get('/allfoods',async(req,res)=>{
       { category: { $regex: search, $options: 'i' } }
     ]
   };
-
-  const sortOption =
+const sortOption =
     sort === 'asc' ? { price: 1 } : sort === 'desc' ? { price: -1 } : {};
-
-  const data = await catfoodsCollection.find(query).sort(sortOption).skip(skip).limit(parseInt(limit)).toArray();
+const data = await catfoodsCollection.find(query).sort(sortOption).skip(skip).limit(parseInt(limit)).toArray();
   const total = await catfoodsCollection.countDocuments(query);
-
-  res.send({ data, total });
+res.send({ data, total });
 })
+// get seller all cats 
+app.get('/seller/allcats/:email', async (req, res) => {
+  if (!catsCollection) return res.status(503).send("Database not connected");
+
+  const { email } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  try {
+    const query = { sellerEmail: email };
+    const totalCount = await catsCollection.countDocuments(query);
+    
+    const result = await catsCollection
+      .find(query)
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    const hasMore = skip + result.length < totalCount;
+
+    res.send({
+      cats: result,
+      totalCount,
+      page,
+      hasMore,
+    });
+  } catch (error) {
+    console.error("Error fetching seller cats:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
 // catfoods post
 app.post('/catfoods',async(req,res)=>{
   const data=req.body
@@ -224,7 +255,7 @@ app.get('/foods/:id',async(req,res)=>{
     res.status(500).send("Internal Server Error");
   }
 });
-
+// for user 
 app.get('/order/:email', async (req, res) => {
   if (!ordersCollection)
     return res.status(503).send('Database not connected');
@@ -262,7 +293,70 @@ app.get('/order/:email', async (req, res) => {
   }
 });
 
-// get single for 
+// for seller on his own order approve
+app.get('/sellerorder/:email', async (req, res) => {
+  if (!ordersCollection)
+    return res.status(503).send('Database not connected');
+
+  const { email } = req.params;
+  const { status } = req.query;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  try {
+    const query = {
+      sellerEmail: email,
+    };
+
+    if (status) {
+      // Use case-insensitive matching for status
+      query.status = new RegExp(`^${status}$`, 'i');
+    }
+
+    const totalCount = await ordersCollection.countDocuments(query);
+
+    const bookings = await ordersCollection
+      .find(query)
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    res.send({ totalCount, bookings });
+
+  } catch (error) {
+    console.error('❌ Error fetching orders:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+// status chang by seller 
+app.patch('/orders/:orderId', async (req, res) => {
+  if (!ordersCollection) {
+    return res.status(503).send('Database not connected');
+  }
+
+  const { orderId } = req.params;
+  const { status } = req.body;
+
+  try {
+    const query = { _id: new ObjectId(orderId) };
+    const update = { $set: { status } };
+
+    const result = await ordersCollection.updateOne(query, update);
+
+    if (result.modifiedCount === 0) {
+      return res.status(404).send('Order not found or already updated');
+    }
+
+    console.log(`✅ Order ${orderId} status updated to ${status}`);
+    res.send({ success: true, message: 'Order status updated' });
+  } catch (error) {
+    console.error('❌ Error updating order:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
 
 
 

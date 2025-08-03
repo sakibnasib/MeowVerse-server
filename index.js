@@ -144,7 +144,39 @@ app.get('/allcats', async (req, res) => {
 
   res.send({ data, total });
 });
+// get seller all cats 
+app.get('/seller/allcats/:email', async (req, res) => {
+  if (!catsCollection) return res.status(503).send("Database not connected");
 
+  const { email } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  try {
+    const query = { sellerEmail: email };
+    const totalCount = await catsCollection.countDocuments(query);
+    
+    const result = await catsCollection
+      .find(query)
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    const hasMore = skip + result.length < totalCount;
+
+    res.send({
+      cats: result,
+      totalCount,
+      page,
+      hasMore,
+    });
+  } catch (error) {
+    console.error("Error fetching seller cats:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
 
 // single cat get by id
 app.get('/cats/:id',async(req,res)=>{
@@ -196,8 +228,24 @@ const data = await catfoodsCollection.find(query).sort(sortOption).skip(skip).li
   const total = await catfoodsCollection.countDocuments(query);
 res.send({ data, total });
 })
-// get seller all cats 
-app.get('/seller/allcats/:email', async (req, res) => {
+
+// single food
+app.get('/foods/:id',async(req,res)=>{
+ const id = req.params.id;
+  if (!catfoodsCollection) return res.status(503).send("Database not connected");
+  try {
+    const cat = await catfoodsCollection.findOne({ _id: new ObjectId(id) });
+    if (!cat) return res.status(404).send("Cat not found");
+    res.send(cat);
+  } catch (error) {
+    console.error("❌ Error in /cats/:id:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+
+// get seller all catfoo 
+app.get('/seller/allfood/:email', async (req, res) => {
   if (!catsCollection) return res.status(503).send("Database not connected");
 
   const { email } = req.params;
@@ -207,9 +255,9 @@ app.get('/seller/allcats/:email', async (req, res) => {
 
   try {
     const query = { sellerEmail: email };
-    const totalCount = await catsCollection.countDocuments(query);
+    const totalCount = await catfoodsCollection.countDocuments(query);
     
-    const result = await catsCollection
+    const result = await catfoodsCollection
       .find(query)
       .sort({ created_at: -1 })
       .skip(skip)
@@ -219,7 +267,7 @@ app.get('/seller/allcats/:email', async (req, res) => {
     const hasMore = skip + result.length < totalCount;
 
     res.send({
-      cats: result,
+      foods: result,
       totalCount,
       page,
       hasMore,
@@ -242,19 +290,7 @@ app.post('/catfoods',async(req,res)=>{
     res.status(500).send("Internal Server Error");
   }
 })
-// single food
-app.get('/foods/:id',async(req,res)=>{
- const id = req.params.id;
-  if (!catfoodsCollection) return res.status(503).send("Database not connected");
-  try {
-    const cat = await catfoodsCollection.findOne({ _id: new ObjectId(id) });
-    if (!cat) return res.status(404).send("Cat not found");
-    res.send(cat);
-  } catch (error) {
-    console.error("❌ Error in /cats/:id:", error);
-    res.status(500).send("Internal Server Error");
-  }
-});
+
 // for user 
 app.get('/order/:email', async (req, res) => {
   if (!ordersCollection)

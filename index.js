@@ -210,7 +210,20 @@ app.get('/foods',async(req,res)=>{
   const result = await catfoodsCollection.find() .sort({ createdAt: -1 }).limit(8).toArray()
       res.send(result) 
 });
-
+// seller delete his own addCat
+app.delete('/seller/cats/:catId',async(req,res)=>{
+   if (!catsCollection) return res.status(503).send("Database not connected");
+   try {
+    const {catId}=req.params
+    const result = await catsCollection.deleteOne({
+      _id: new ObjectId(catId),
+    });
+    res.send(result);
+  } catch (error) {
+    console.error("❌ Error deleting catFood:", error);
+    res.status(500).send("Internal Server Error");
+  }
+})
 // get all foodspagination
 app.get('/allfoods',async(req,res)=>{
   const { search = '', sort = '', page = 1, limit = 8 } = req.query;
@@ -246,7 +259,7 @@ app.get('/foods/:id',async(req,res)=>{
 
 // get seller all catfoo 
 app.get('/seller/allfood/:email', async (req, res) => {
-  if (!catsCollection) return res.status(503).send("Database not connected");
+  if (!catfoodsCollection) return res.status(503).send("Database not connected");
 
   const { email } = req.params;
   const page = parseInt(req.query.page) || 1;
@@ -290,7 +303,20 @@ app.post('/catfoods',async(req,res)=>{
     res.status(500).send("Internal Server Error");
   }
 })
-
+// seller delete his own addCatFood 
+app.delete('/seller/catfood/:foodId',async(req,res)=>{
+   if (!catfoodsCollection) return res.status(503).send("Database not connected");
+   try {
+    const {foodId}=req.params
+    const result = await catfoodsCollection.deleteOne({
+      _id: new ObjectId(foodId),
+    });
+    res.send(result);
+  } catch (error) {
+    console.error("❌ Error deleting catFood:", error);
+    res.status(500).send("Internal Server Error");
+  }
+})
 // for user 
 app.get('/order/:email', async (req, res) => {
   if (!ordersCollection)

@@ -42,6 +42,116 @@ app.get("/user", async (req, res) => {
 const result = await usersCollection.find().toArray()
       res.send(result) 
 });
+// adminGet Alluser
+app.get("/admin/users",async (req, res) => {
+  if (!usersCollection) return res.status(503).send("Database not connected");
+
+  try {
+    const { role, search, page = 1, limit = 10 } = req.query;
+
+    const filter = {};
+
+    if (role) {
+      filter.role = role;
+    } else {
+      filter.role = { $ne: "admin" };
+    }
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const users = await usersCollection
+      .find(filter)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .toArray();
+
+    const count = await usersCollection.countDocuments(filter);
+
+    res.send({ data: users, count });
+  } catch (error) {
+    console.error("❌ Error fetching users:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+// aprove seller quest 
+app.patch('/seller/approve/:id',async(req,res)=>{
+  const {id}=req.params
+  try{
+const result=await usersCollection.updateOne({_id: new ObjectId(id)},
+ { $set: { role: 'seller', applied: false,seller_at:new Date().toISOString()}})
+ res.send(result);
+  }catch (error) {
+console.error("❌ Error fetching users:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+// Reject seller quest 
+app.patch('/seller/reject/:id', async (req, res) => {
+  const { id } = req.params;
+  const result = await usersCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { applied: false } }
+  );
+  res.send(result);
+});
+// get only seller 
+app.get('/admin/seller', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const search = req.query.search || '';
+
+  const skip = (page - 1) * limit;
+
+  const query = {
+    role: 'seller',
+    name: { $regex: search, $options: 'i' },
+  };
+
+  const total = await usersCollection.countDocuments(query);
+  const sellers = await usersCollection
+    .find(query)
+    .skip(skip)
+    .limit(limit)
+    .toArray();
+
+  res.send({ total, page, limit, sellers });
+});
+
+
+
+// GET /allseler/applied
+app.get('/allseler/applied', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const sellers = await usersCollection
+      .find({ applied: true })
+      .skip(skip)
+      .limit(limit)
+      .toArray(); 
+    const total = await usersCollection.countDocuments({ applied: true });
+
+    res.send({
+      data: sellers,
+      total,
+    });
+  } catch (error) {
+    console.error('Error fetching applied sellers:', error);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+
+
 
 // user get by email
 app.get('/user/:email',async(req,res)=>{
@@ -205,11 +315,52 @@ app.post('/cats',async(req,res)=>{
     res.status(500).send("Internal Server Error");
   }
 })
-// get 8 food for home page 
-app.get('/foods',async(req,res)=>{
-  const result = await catfoodsCollection.find() .sort({ createdAt: -1 }).limit(8).toArray()
-      res.send(result) 
+
+// seller Edite his own post cat data
+app.patch('/seller/cats/:catId', async (req, res) => {
+  if (!catsCollection) return res.status(503).send("Database not connected");
+
+  const { catId } = req.params;
+
+  if (!ObjectId.isValid(catId)) {
+    return res.status(400).send("Invalid cat ID format");
+  }
+
+  try {
+    const data = { ...req.body };
+
+    // 🛠️ Remove _id if it's present to avoid MongoDB error
+    delete data._id;
+
+    // Optionally validate numbers
+    if (
+      typeof data.price !== 'number' ||
+      typeof data.quantity !== 'number' ||
+      isNaN(data.price) ||
+      isNaN(data.quantity)
+    ) {
+      return res.status(400).send("Price and quantity must be valid numbers");
+    }
+
+    const updateResult = await catsCollection.updateOne(
+      { _id: new ObjectId(catId) },
+      { $set: data }
+    );
+
+    if (updateResult.modifiedCount === 0) {
+      return res.status(404).send("Cat not found or no changes made");
+    }
+
+    res.send({ success: true, message: "Cat updated successfully" });
+
+  } catch (error) {
+    console.error('Error updating cat:', error);
+    res.status(500).send("Internal Server Error");
+  }
 });
+
+
+
 // seller delete his own addCat
 app.delete('/seller/cats/:catId',async(req,res)=>{
    if (!catsCollection) return res.status(503).send("Database not connected");
@@ -224,6 +375,13 @@ app.delete('/seller/cats/:catId',async(req,res)=>{
     res.status(500).send("Internal Server Error");
   }
 })
+
+
+// get 8 food for home page 
+app.get('/foods',async(req,res)=>{
+  const result = await catfoodsCollection.find() .sort({ createdAt: -1 }).limit(8).toArray()
+      res.send(result) 
+});
 // get all foodspagination
 app.get('/allfoods',async(req,res)=>{
   const { search = '', sort = '', page = 1, limit = 8 } = req.query;
@@ -299,10 +457,32 @@ app.post('/catfoods',async(req,res)=>{
   const result= await catfoodsCollection.insertOne(data);
   res.send(result);
   }catch (error) {
-    console.error("❌ Error in /cats:", error);
+    console.error("❌ Error in /catfoods:", error);
     res.status(500).send("Internal Server Error");
   }
 })
+// seller Edide his own post catfood post 
+app.patch('/seller/foods/:id',async(req,res)=>{
+   const { id } = req.params;
+  const updatedData = req.body;
+
+  try{
+     const updateResult = await catfoodsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedData }
+    );
+
+    if (updateResult.modifiedCount === 0) {
+      return res.status(404).send("Cat not found or no changes made");
+    }
+
+    res.send({ success: true, message: "Cat updated successfully" });
+}catch{
+  console.error("❌ Error in /seller/foods/:", error);
+    res.status(500).send("Internal Server Error");
+}
+})
+
 // seller delete his own addCatFood 
 app.delete('/seller/catfood/:foodId',async(req,res)=>{
    if (!catfoodsCollection) return res.status(503).send("Database not connected");
